@@ -1,0 +1,26 @@
+# Python env
+.venv/
+.venv_notebook/
+requirements.lock.txt
+
+# Python cache
+__pycache__/
+*.pyc
+
+# outputs / generated artifacts
+#outputs/
+outputs_old/
+outputs_single/
+testing_output/
+Outputs_All_prediction/
+tmp/
+*.png
+#*.csv
+*.npz
+archive/
+
+#input
+input-database/
+# macOS
+.DS_Store
+

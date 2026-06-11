@@ -1,0 +1,105 @@
+# LIG-PROSPECT - LIGand-based PROtein-agnostic SPECTral Prediction
+LIG-PROSPECT is a machine learning framework for predicting flavoprotein excitation spectra from cofactor-substrate structural data. This pipeline supports multiple structural descriptors and provides reproducible workflows for training, evaluation and mutant prediction.
+
+## Overview
+LIG-PROSPECT establishes a mapping between molecular structure and spectral response using a combination of structural featurization, dimensionality reduction, and supervised learning models. The framework supports multiple descriptor types and provides end-to-end workflows for training, evaluation, and prediction.
+
+## Descriptors
+- DD : 4-distance descriptors
+- ADD: 4-distance + 3 angle descriptors
+- PCA-CC: Principal Component Analysis on Cartesian Coordinates
+- UMAP-IC: UMAP on Internal Coordinates
+
+## Features
+- Bootstrap-based model evaluation
+- Single-iteration reproduction 
+- Held-out mutant prediction
+- Deterministic dataset splitting for reproducibility
+- Command line workflows for end-to-end analysis
+- Export of prediction results and figures
+
+## Installation
+Install dependencies:
+```
+pip install -r requirements_notebook.txt
+```
+Install in editable mode:
+```
+pip install -e .
+```
+## Input data
+The pipeline is designed to work with structural datatsets derived from cofactor-substrate conformations after docking in protein environment. Depending on the descriptor, inputs may include:
+
+- XYZ coordinate files
+- CSV metadata files containing 4 excitational energies and corresponding oscillator strengths
+- Precomputed descriptor files
+
+## Project Structure
+
+```
+lig-prospect/ 
+|-- configs/ # YAML configuration files 
+|-- src/lig_prospect/ # Source code 
+|-- input-database/ # Input structural and descriptor data 
+|-- outputs/ # Predictions, metrics, and figures 
+|-- requirements_notebook.txt 
+|-- README.md
+
+input-database/ 
+|--- all-conformations/ 
+│     |-- xyz/ 
+│     |-- csv/ 
+│     |-- desc-4/ 
+│     |-- desc-7-radians/
+```
+
+## Output
+Depending on the workflow, LIG-PROSPECT generates:
+
+- Predicted vs. actual wavelength CSV files
+- Peak analysis outputs
+- Histograms and scatter plots
+- Bootstrap summary statistics
+- Mutant prediction results
+
+## Usage
+
+### Configuration file
+All workflows are controlled via a YAML configuration file:
+
+```
+seed: 123
+n_bootstrap_iterations: 100
+training_sizes: [60, 70, 80, 90, 100]
+test_set_size: 54
+file_glob: "*cluster*"
+wavelength_max_nm: 900
+pad_value: -1
+```
+
+Run commands by passing the config file:
+```
+spectra-bootstrap --config configs/config.yaml
+```
+### Run bootstrap workflow
+```
+spectra-bootstrap --config configs/config.yaml
+```
+### Run single iteration
+```
+spectra-single --config configs/config.yaml
+```
+### Run mutant prediction
+```
+spectra-mutant --config configs/config.yaml
+```
+## Citation
+If you use this code in your work, please cite:
+
+## Contact
+Sijia Dong (s.dong (AT) northeastern.edu)
+
+Bhumika Jayee (bhumikajayee03 (AT) gmail.com)
+
+---
+© 2025 Northeastern University. Any commercial use of this work without explicit written permission from the copyright holder is strictly prohibited. 

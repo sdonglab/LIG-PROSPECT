@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spectra-bootstrap-v2"
+version = "0.1.0"
+description = "Reproducible bootstrapping + single-split runners for spectral ML manuscript (PCA-CC, UMAP-IC, DD, ADD)."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "numpy",
+  "pandas",
+  "scikit-learn",
+  "pyyaml",
+  "matplotlib",
+  "umap-learn; platform_system != 'Windows' or python_version >= '3.9'",
+]
+
+[project.scripts]
+spectra-bootstrap = "spectra_bootstrap_v2.bootstrap_cli:main"
+spectra-single = "spectra_bootstrap_v2.single_cli:main"

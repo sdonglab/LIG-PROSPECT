@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lig-prospect"
+version = "0.1.0"
+description = "A Machine Learning Pipeline for Predicting Flavoprotein Spectra from Structural Descriptors (PCA-CC, UMAP-IC, DD, ADD)."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "numpy",
+  "pandas",
+  "scikit-learn",
+  "pyyaml",
+  "matplotlib",
+  "umap-learn; platform_system != 'Windows' or python_version >= '3.9'",
+]
+
+[project.scripts]
+spectra-bootstrap = "lig_prospect.bootstrap_cli:main"
+spectra-single = "lig_prospect.single_cli:main"
+spectra-mutant = "lig_prospect.mutant_cli:main"
+spectra-predict = "lig_prospect.predict_cli:main"

@@ -1,0 +1,5 @@
+[console_scripts]
+spectra-bootstrap = lig_prospect.bootstrap_cli:main
+spectra-mutant = lig_prospect.mutant_cli:main
+spectra-predict = lig_prospect.predict_cli:main
+spectra-single = lig_prospect.single_cli:main

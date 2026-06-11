@@ -1,0 +1,55 @@
+# ===============================
+# LIG-PROSPECT PREDICTION CONFIG
+# ===============================
+
+prediction:
+  # Options:
+  #   single_run_random_split
+  #   hold_out_mutant
+  workflow: single_run_random_split
+
+  # Options:
+  #   dd
+  #   add
+  #   pca_cc
+  #   umap_ic
+  descriptor: dd
+
+  # Required only for workflow: hold_out_mutant
+  # Options in your current saved models:
+  #   A36E
+  #   K283G
+  #   WT
+  holdout_mutant: A36E
+
+# ===============================
+# MODEL LOCATION
+# ===============================
+
+model:
+  root: saved_models
+
+# ===============================
+# NEW INPUT DATA
+# ===============================
+
+data:
+  # For dd:
+  #   new_data/desc-4
+  #
+  # For add:
+  #   new_data/desc-7-radians
+  #
+  # For pca_cc or umap_ic:
+  #   new_data/xyz
+  features_dir: new_data/desc-4
+  file_glob: "*"
+  dataset_name: new_data_desc-4
+
+# ===============================
+# OUTPUT
+# ===============================
+output:
+  root: outputs/prediction
+  filename_suffix: predictions
+  pad_value: 0.0
