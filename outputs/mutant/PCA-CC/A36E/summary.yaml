@@ -1,0 +1,8 @@
+descriptor: PCA-CC
+test_mutant: A36E
+method: pca
+best_k: 16
+train_rmse: 40.827721507816904
+test_rmse: 60.26183991189477
+n_train: 170
+n_test: 100

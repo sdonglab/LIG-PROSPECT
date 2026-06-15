@@ -1,0 +1,8 @@
+descriptor: DD
+test_mutant: WT
+method: none
+best_k: null
+train_rmse: 57.64451830721419
+test_rmse: 56.435065928453085
+n_train: 137
+n_test: 133

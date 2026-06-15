@@ -1,0 +1,12 @@
+model:
+  path: saved_models/ligprospect_dd_mutant_holdout_A36E_model.joblib
+  metadata: saved_models/ligprospect_dd_mutant_holdout_A36E_metadata.yaml
+
+data:
+  descriptor: dd
+  features_dir: new_data/desc-4
+  file_glob: "*"
+
+output:
+  path: outputs/prediction/mutant/
+  pad_value: 0.0

@@ -1,0 +1,48 @@
+run:
+  out_root: outputs
+  descriptor: dd
+
+seed: 123
+n_bootstrap_iterations: 100
+training_sizes: [60,70,80,90,100,110,120,130,140,150,160,170,180,190]
+test_set_size: 54
+
+bootstrap:
+  use_splits: true
+  splits_path: outputs/splits_seed123_test54_iter100.npz
+  reuse_splits_if_exists: true
+
+single:
+  use_splits: true
+  splits_path: outputs/splits_seed123_test54_iter100.npz
+  reuse_splits_if_exists: true
+  iteration: 8
+  train_size: 190
+
+excitations_dir: input-database/all-conformations/csv
+file_glob: "*cluster*"
+wavelength_max_nm: 900
+pad_value: -1
+
+descriptors:
+  pca_cc:
+    features_dir: input-database/all-conformations/xyz
+    method: pca
+    max_components: 30
+
+  umap_ic:
+    features_dir: input-database/all-conformations/xyz
+    method: umap
+    max_components: 30
+    umap:
+      n_neighbors: 15
+      min_dist: 0.1
+      metric: euclidean
+
+  dd:
+    features_dir: input-database/all-conformations/desc-4
+    method: none
+
+  add:
+    features_dir: input-database/all-conformations/desc-7-radians
+    method: none

@@ -1,0 +1,22 @@
+mode: single
+descriptor: dd
+descriptor_pretty: DD
+iteration: 8
+train_size: 190
+test_size: 54
+seed: 123
+method: none
+max_components: 30
+splits_path: outputs/single/shared_splits.npz
+reuse_splits_if_exists: true
+train_rmse: 37.558236987484
+test_rmse: 34.6905562057574
+n_features_in: 4
+n_outputs: 8
+n_train: 190
+n_test: 54
+model_file: model_bundle.joblib
+contains_training_data: false
+contains_private_raw_data: false
+public_inference_note: Load model_bundle.joblib and apply the same descriptor-generation
+  steps before calling predict_with_model_bundle().

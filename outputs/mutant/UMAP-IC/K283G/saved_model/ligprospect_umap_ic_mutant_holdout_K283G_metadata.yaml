@@ -1,0 +1,15 @@
+descriptor: UMAP-IC
+test_mutant: K283G
+method: umap
+best_k: 4
+train_rmse: 50.066863985623804
+test_rmse: 62.12751000113215
+n_train: 233
+n_test: 37
+n_features_in: 237
+n_outputs: 8
+model_file: ligprospect_umap_ic_mutant_holdout_K283G_model.joblib
+contains_training_data: false
+contains_private_raw_data: false
+public_inference_note: Load model_bundle.joblib and apply the same descriptor-generation
+  steps before calling predict_with_model_bundle().

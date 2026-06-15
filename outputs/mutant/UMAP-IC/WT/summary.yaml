@@ -1,0 +1,8 @@
+descriptor: UMAP-IC
+test_mutant: WT
+method: umap
+best_k: 1
+train_rmse: 58.52896886240429
+test_rmse: 52.78558794514508
+n_train: 137
+n_test: 133

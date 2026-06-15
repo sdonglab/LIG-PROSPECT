@@ -1,0 +1,15 @@
+descriptor: DD
+test_mutant: K283G
+method: none
+best_k: null
+train_rmse: 50.881809110258764
+test_rmse: 72.24995499723391
+n_train: 233
+n_test: 37
+n_features_in: 4
+n_outputs: 8
+model_file: ligprospect_dd_mutant_holdout_K283G_model.joblib
+contains_training_data: false
+contains_private_raw_data: false
+public_inference_note: Load model_bundle.joblib and apply the same descriptor-generation
+  steps before calling predict_with_model_bundle().

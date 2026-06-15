@@ -1,0 +1,8 @@
+descriptor: DD
+test_mutant: A36E
+method: none
+best_k: null
+train_rmse: 49.88243178805216
+test_rmse: 61.434048239785554
+n_train: 170
+n_test: 100

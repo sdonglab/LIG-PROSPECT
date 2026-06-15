@@ -9,6 +9,7 @@ __pycache__/
 
 # outputs / generated artifacts
 #outputs/
+1/
 outputs_old/
 outputs_single/
 testing_output/

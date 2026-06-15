@@ -1,0 +1,8 @@
+descriptor: PCA-CC
+test_mutant: K283G
+method: pca
+best_k: 16
+train_rmse: 42.490936811490585
+test_rmse: 62.481309936778594
+n_train: 233
+n_test: 37
