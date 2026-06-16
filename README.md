@@ -96,6 +96,9 @@ spectra-mutant --config configs/config.yaml
 ## Citation
 If you use this code in your work, please cite:
 
+Bhumika Jayee, Sunny Lee, Sijia S. Dong. Sequence-Transferrable Machine Learning Prediction of Flavin-Dependent Photoenzyme Spectral Properties. ChemRxiv. 2026. https://doi.org/10.26434/chemrxiv.15002532/v2
+
+
 ## Contact
 Sijia Dong (s.dong (AT) northeastern.edu)
 
