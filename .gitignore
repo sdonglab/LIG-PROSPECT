@@ -1,20 +1,30 @@
 # Python env
 .venv/
 .venv_notebook/
+.venv_notebook_match/
 requirements.lock.txt
 
 # Python cache
 __pycache__/
 *.pyc
 
+#configs
+configs/test.yaml
+configs/config_pred.yaml
+
 # outputs / generated artifacts
 #outputs/
 1/
+outputs/test_one_prediction.csv
 outputs_old/
 outputs_single/
 testing_output/
 Outputs_All_prediction/
 tmp/
+saved_models/ligprospect_dd_mutant_holdout_A36E_metadata.yaml	
+saved_models/ligprospect_dd_single_iter008_best_model.joblib
+saved_models/ligprospect_dd_mutant_holdout_A36E_model.joblib
+saved_models/ligprospect_dd_single_iter008_best_metadata.yaml
 *.png
 #*.csv
 *.npz
