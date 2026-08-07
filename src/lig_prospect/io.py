@@ -135,21 +135,44 @@ def _read_descriptor_floats(path: Path) -> np.ndarray:
     vals = [float(t) for t in toks]
     return np.asarray(vals, dtype=float)
 
-def read_excitations_csv(path: Path, wavelength_max_nm: float, pad_value: float) -> np.ndarray:
+def read_excitations_csv(
+    path: Path,
+    wavelength_max_nm: float,
+    pad_value: float,
+    filter_wavelengths: bool = True,
+) -> np.ndarray:
     """
-    Match notebook behavior:
-    - read csv to df
-    - if ANY wavelength > threshold exists: caller will DROP the conformation entirely
-    - else: drop rows with wavelength > threshold (no-op given the check), flatten, pad back to original size
+    Read excitation wavelengths and oscillator strengths.
+
+    When filter_wavelengths=True:
+        Remove excitation rows above wavelength_max_nm and pad the result.
+
+    When filter_wavelengths=False:
+        Keep every excitation row, including wavelengths above the cutoff.
     """
     df = pd.read_csv(path)
     num_elements = df.shape[0] * df.shape[1]
-    df2 = df.drop(df[df["wavelength"] > wavelength_max_nm].index) if "wavelength" in df.columns else df
-    arr = df2.to_numpy().astype(float).flatten()
-    if len(arr) < num_elements:
-        arr = np.pad(arr, (0, num_elements - len(arr)), mode="constant", constant_values=pad_value)
-    return arr
 
+    if filter_wavelengths:
+        wavelength_col = (
+            "wavelength"
+            if "wavelength" in df.columns
+            else df.columns[0]
+        )
+
+        df = df.loc[df[wavelength_col] <= wavelength_max_nm]
+
+    arr = df.to_numpy(dtype=float).flatten()
+
+    if len(arr) < num_elements:
+        arr = np.pad(
+            arr,
+            (0, num_elements - len(arr)),
+            mode="constant",
+            constant_values=pad_value,
+        )
+
+    return arr
 def load_dataset(
     *,
     descriptor: str,
@@ -158,11 +181,12 @@ def load_dataset(
     file_glob: str = "*cluster*",
     wavelength_max_nm: float = 900.0,
     pad_value: float = -1.0,
+    filter_wavelengths: bool = True,
 ) -> Dataset:
     """
     descriptor: one of {"pca_cc","umap_ic","dd","add"} controlling how features are built.
-    - pca_cc: xyz -> tokens (Z, x, y, z) per atom (like PCA-CC notebook)
-    - umap_ic: xyz -> internal coords (like PCA-IC notebook)
+    - pca_cc: xyz -> tokens (Z, x, y, z) per atom
+    - umap_ic: xyz -> internal coordinates
     - dd/add: read descriptor floats from text files
     """
     descriptor = descriptor.lower()
@@ -171,7 +195,9 @@ def load_dataset(
 
     feature_paths = sorted(features_dir.glob(file_glob))
     if not feature_paths:
-        raise FileNotFoundError(f"No feature files matched {file_glob!r} under {features_dir}")
+        raise FileNotFoundError(
+            f"No feature files matched {file_glob!r} under {features_dir}"
+        )
 
     X_rows: List[np.ndarray] = []
     y_rows: List[np.ndarray] = []
@@ -181,41 +207,91 @@ def load_dataset(
     for fp in feature_paths:
         stem = fp.stem
         csv_path = excitations_dir / f"{stem}.csv"
+
         if not csv_path.exists():
             dropped.append(stem)
             continue
 
-        df_check = pd.read_csv(csv_path)
-        if "wavelength" in df_check.columns:
-            if (df_check["wavelength"] > wavelength_max_nm).any():
-                dropped.append(stem)
-                continue
-        else:
-            # fallback: first column is wavelength-like
-            if (df_check.iloc[:, 0] > wavelength_max_nm).any():
+        # Only inspect and drop conformations when filtering is enabled.
+        if filter_wavelengths:
+            df_check = pd.read_csv(csv_path)
+
+            wavelength_values = (
+                df_check["wavelength"]
+                if "wavelength" in df_check.columns
+                else df_check.iloc[:, 0]
+            )
+
+            if (wavelength_values > wavelength_max_nm).any():
                 dropped.append(stem)
                 continue
 
-        y = read_excitations_csv(csv_path, wavelength_max_nm=wavelength_max_nm, pad_value=pad_value)
+        y = read_excitations_csv(
+            csv_path,
+            wavelength_max_nm=wavelength_max_nm,
+            pad_value=pad_value,
+            filter_wavelengths=filter_wavelengths,
+        )
 
-        if descriptor in ("pca_cc",):
+        if descriptor == "pca_cc":
             x = _read_xyz_tokens_as_numeric(fp)
-        elif descriptor in ("umap_ic",):
+        elif descriptor == "umap_ic":
             x = _internal_coords_from_xyz(fp)
-        elif descriptor in ("dd","add"):
+        elif descriptor in ("dd", "add"):
             x = _read_descriptor_floats(fp)
         else:
-            raise ValueError("descriptor must be one of: pca_cc, umap_ic, dd, add")
+            raise ValueError(
+                "descriptor must be one of: pca_cc, umap_ic, dd, add"
+            )
 
         X_rows.append(x)
         y_rows.append(y)
         stems.append(stem)
 
     if not X_rows:
-        raise RuntimeError("No usable samples were loaded (all files dropped or missing excitations CSVs).")
+        raise RuntimeError(
+            "No usable samples were loaded "
+            "(all files dropped or missing excitations CSVs)."
+        )
 
     max_len = max(len(r) for r in X_rows)
-    X = np.vstack([np.pad(r, (0, max_len - len(r)), mode="constant", constant_values=0.0) for r in X_rows])
-    y = np.vstack(y_rows)
 
-    return Dataset(X=X, y=y, filenames=stems)
+    X = np.vstack(
+        [
+            np.pad(
+                r,
+                (0, max_len - len(r)),
+                mode="constant",
+                constant_values=0.0,
+            )
+            for r in X_rows
+        ]
+    )
+    max_y_len = max(len(r) for r in y_rows)
+    y = np.vstack(
+    [
+        np.pad(
+            r,
+            (0, max_y_len - len(r)),
+            mode="constant",
+            constant_values=pad_value,
+        )
+        for r in y_rows
+    ]
+)
+
+ #   y = np.vstack(y_rows)
+
+    print(
+        f"Loaded {len(stems)} samples; "
+        f"dropped {len(dropped)} samples; "
+        f"X shape={X.shape}; "
+        f"y shape={y.shape}; "
+        f"filter_wavelengths={filter_wavelengths}"
+    )
+
+    return Dataset(
+        X=X,
+        y=y,
+        filenames=stems,
+    )

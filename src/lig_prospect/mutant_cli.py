@@ -10,7 +10,7 @@ import joblib  # type: ignore
 
 from .io import load_dataset
 from .mutant_core import MutantCfg, run_mutant_prediction
-#from .mutant_outputs import save_predictions_tables, save_wavelength_histogram, analyze_and_save_peaks
+from .mutant_outputs import save_predictions_tables, save_wavelength_histogram, analyze_and_save_peaks
 
 DESCRIPTOR_TAGS = {
     "pca_cc": "PCA-CC",
@@ -43,6 +43,7 @@ def main() -> None:
     common = dict(
         file_glob=str(cfg_all.get("file_glob", "*cluster*")),
         wavelength_max_nm=float(cfg_all.get("wavelength_max_nm", 900)),
+        filter_wavelengths=bool(cfg_all.get("filter_wavelengths", True)),
         pad_value=float(cfg_all.get("pad_value", -1)),
         excitations_dir=Path(cfg_all["excitations_dir"]),
     )
@@ -53,7 +54,16 @@ def main() -> None:
     sigma = float(mp_cfg.get("sigma", 0.2))
     peak_height = float(mp_cfg.get("peak_height", 0.0))
     bins = int(mp_cfg.get("bins", 25))
-    max_wl = float(mp_cfg.get("max_wavelength_nm", common["wavelength_max_nm"]))
+#    max_wl = float(mp_cfg.get("max_wavelength_nm", common["wavelength_max_nm"]))
+    if common["filter_wavelengths"]:
+       max_wl = float(
+          mp_cfg.get(
+              "max_wavelength_nm",
+               common["wavelength_max_nm"],
+          )
+       )
+    else:
+       max_wl = float("inf")
     do_peaks = bool(mp_cfg.get("do_peak_analysis", True))
 
     descriptors = cfg_all.get("descriptors", {}) or {}
@@ -72,6 +82,7 @@ def main() -> None:
             excitations_dir=common["excitations_dir"],
             file_glob=common["file_glob"],
             wavelength_max_nm=common["wavelength_max_nm"],
+            filter_wavelengths=common["filter_wavelengths"], 
             pad_value=common["pad_value"],
         )
         print("descriptor:", key_l)

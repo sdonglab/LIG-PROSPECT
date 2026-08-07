@@ -10,6 +10,7 @@ import joblib  # type: ignore
 from .io import load_dataset
 from .single_core import SingleCfg, run_single_iteration_notebook_exact, write_single_csvs
 from .mutant_outputs import save_predictions_tables, save_wavelength_histogram, analyze_and_save_peaks
+from .sizing import resolve_split_sizes
 
 # Pretty names for printing only
 DESCRIPTOR_TAGS = {
@@ -61,6 +62,7 @@ def main() -> None:
     common = dict(
         file_glob=str(cfg_all.get("file_glob", "*cluster*")),
         wavelength_max_nm=float(cfg_all.get("wavelength_max_nm", 900)),
+        filter_wavelengths=bool(cfg_all.get("filter_wavelengths", True)),
         pad_value=float(cfg_all.get("pad_value", -1)),
         excitations_dir=Path(cfg_all["excitations_dir"]),
     )
@@ -68,20 +70,68 @@ def main() -> None:
     # Bootstrap-aligned defaults (keep these consistent with bootstrap_cli.py)
     seed_value = int(cfg_all.get("seed", 123))
     n_boot = int(cfg_all.get("n_bootstrap_iterations", 100))
-    test_set_size = int(cfg_all.get("test_set_size", 54))
-    training_sizes = [int(x) for x in cfg_all.get("training_sizes", list(range(60, 200, 10)))]
+
+    descriptors_cfg = cfg_all.get("descriptors", {}) or {}
+    if not descriptors_cfg:
+        raise ValueError("No 'descriptors' configured in YAML.")
+    selected_desc = {
+        k: v for k, v in descriptors_cfg.items()
+        if descriptor_sel == "all" or _clean_desc_key(k) == descriptor_sel
+    }
+    if not selected_desc:
+        raise ValueError(f"No descriptors matched selection '{descriptor_sel}'.")
+
+    # Load ONE descriptor's dataset first, purely to learn n_samples, so
+    # test_set_size / training_sizes scale with whatever conformation set
+    # is actually loaded instead of being fixed numbers tied to an old dataset.
+    first_key, first_desc_cfg = next(iter(selected_desc.items()))
+    first_ds = load_dataset(
+        descriptor=_clean_desc_key(first_key),
+        features_dir=Path(first_desc_cfg["features_dir"]),
+        excitations_dir=common["excitations_dir"],
+        file_glob=common["file_glob"],
+        wavelength_max_nm=common["wavelength_max_nm"],
+        filter_wavelengths=common["filter_wavelengths"],
+        pad_value=common["pad_value"],
+    )
+    n_samples = first_ds.X.shape[0]
+    test_set_size, training_sizes = resolve_split_sizes(n_samples, cfg_all)
+    print(
+        f"📏 n_samples={n_samples} -> test_set_size={test_set_size}, "
+        f"training_sizes={training_sizes}"
+    )
 
     # Single config block
     single_cfg = cfg_all.get("single", {}) or {}
     iteration = int(single_cfg.get("iteration", 8))
-    train_size = int(single_cfg.get("train_size", 190))
+    # Default to the largest resolved training size instead of a fixed "190"
+    train_size = int(single_cfg.get("train_size", training_sizes[-1]))
+    if train_size not in training_sizes:
+        raise ValueError(
+            f"single.train_size={train_size} is not one of the resolved "
+            f"training_sizes={training_sizes}. Pick one of those, or set "
+            f"single.train_size explicitly to a value in that list."
+        )
 
     # Peak analysis settings (optional; mirrors mutant defaults)
     sigma = float(single_cfg.get("sigma", 0.2))
     peak_height = float(single_cfg.get("peak_height", 0.0))
     bins = int(single_cfg.get("bins", 25))
     do_peaks = bool(single_cfg.get("do_peak_analysis", True))
-    max_wl = float(single_cfg.get("max_wavelength_nm", common["wavelength_max_nm"]))
+    if common["filter_wavelengths"]:
+       max_wl = float(
+         single_cfg.get(
+             "max_wavelength_nm",
+              common["wavelength_max_nm"],
+         )
+       )
+    else:
+       max_wl = float("inf")
+    print(
+          f"Input wavelength filtering: {common['filter_wavelengths']} | "
+          f"Output max wavelength: {max_wl}"
+    )
+#    max_wl = float(single_cfg.get("max_wavelength_nm", common["wavelength_max_nm"]))
 
     # Splits behavior (Option A)
     use_splits = bool(single_cfg.get("use_splits", True))
@@ -101,24 +151,31 @@ def main() -> None:
     # Stable run tag for folder/files
     run_tag = f"iter_{iteration:03d}_train_{train_size}"
 
-    descriptors = cfg_all.get("descriptors", {}) or {}
-    for key, desc_cfg in descriptors.items():
+    for key, desc_cfg in selected_desc.items():
         desc_key = _clean_desc_key(key)
         if desc_key not in DESCRIPTOR_TAGS:
             raise ValueError(f"Unknown descriptor key: {desc_key}. Use one of {sorted(DESCRIPTOR_TAGS)}")
-        if descriptor_sel != "all" and desc_key != descriptor_sel:
-            continue
 
         pretty = DESCRIPTOR_TAGS[desc_key]
 
-        ds = load_dataset(
-            descriptor=desc_key,
-            features_dir=Path(desc_cfg["features_dir"]),
-            excitations_dir=common["excitations_dir"],
-            file_glob=common["file_glob"],
-            wavelength_max_nm=common["wavelength_max_nm"],
-            pad_value=common["pad_value"],
-        )
+        if key == first_key:
+            ds = first_ds  # already loaded above to determine n_samples
+        else:
+            ds = load_dataset(
+                descriptor=desc_key,
+                features_dir=Path(desc_cfg["features_dir"]),
+                excitations_dir=common["excitations_dir"],
+                file_glob=common["file_glob"],
+                wavelength_max_nm=common["wavelength_max_nm"],
+                filter_wavelengths=common["filter_wavelengths"],
+                pad_value=common["pad_value"],
+            )
+            if ds.X.shape[0] != n_samples:
+                raise ValueError(
+                    f"Descriptor '{desc_key}' loaded {ds.X.shape[0]} samples but "
+                    f"'{first_key}' loaded {n_samples}. All descriptors must share "
+                    f"the same conformation set for shared splits to be valid."
+                )
 
         method = str(desc_cfg.get("method", "none")).lower()
         max_components = int(desc_cfg.get("max_components", 30))

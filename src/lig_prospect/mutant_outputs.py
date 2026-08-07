@@ -144,8 +144,8 @@ def analyze_and_save_peaks(
     dpi: int = 300,
     # notebook-like histogram controls
     hist_bins: int | np.ndarray = 25,
-    hist_xlim: tuple[float, float] | None = (400, 900),
-    hist_ylim: tuple[float, float] | None = (0, 30),
+    hist_xlim: tuple[float, float] | None = None,
+    hist_ylim: tuple[float, float] | None = None,
     save_first5_overlay: bool = False,
     debug_index: int | None = None,  # set to None to disable debug prints
 ) -> dict:
