@@ -11,14 +11,20 @@ requires-python = ">=3.9"
 dependencies = [
   "numpy",
   "pandas",
+  "joblib",
   "scikit-learn",
   "pyyaml",
   "matplotlib",
+  "scipy",
   "umap-learn; platform_system != 'Windows' or python_version >= '3.9'",
 ]
 
+[project.optional-dependencies]
+notebook = ["jupyterlab"]
+
 [project.scripts]
-spectra-bootstrap = "lig_prospect.bootstrap_cli:main"
-spectra-single = "lig_prospect.single_cli:main"
-spectra-mutant = "lig_prospect.mutant_cli:main"
-spectra-predict = "lig_prospect.predict_cli:main"
+ligprospect-evaluate-bootstrap = "lig_prospect.bootstrap_cli:main"
+ligprospect-train-single-split = "lig_prospect.single_cli:main"
+ligprospect-evaluate-heldout-mutant = "lig_prospect.mutant_cli:main"
+ligprospect-compare-models = "lig_prospect.compare_baselines_cli:main"
+ligprospect-predict = "lig_prospect.predict_cli:main"

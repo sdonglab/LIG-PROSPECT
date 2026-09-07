@@ -1,8 +1,0 @@
-descriptor: ADD
-test_mutant: A36E
-method: none
-best_k: null
-train_rmse: 49.38988310436724
-test_rmse: 60.83004690187691
-n_train: 170
-n_test: 100

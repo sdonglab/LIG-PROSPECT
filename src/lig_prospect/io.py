@@ -1,297 +1,173 @@
+"""Input readers and dataset assembly for LIG-PROSPECT."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
 
 import numpy as np
 import pandas as pd
 
-ATOM_MAP: Dict[str, float] = {"H": 1.0, "C": 6.0, "N": 7.0, "O": 8.0, "P": 15.0, "Cl": 17.0}
+ATOM_NUMBERS = {"H": 1.0, "C": 6.0, "N": 7.0, "O": 8.0, "P": 15.0, "Cl": 17.0}
+VALID_DESCRIPTORS = {"pca_cc", "umap_ic", "dd", "add"}
+
 
 @dataclass(frozen=True)
 class Dataset:
+    """Features, labels, and matching filename stems for a training dataset."""
+
     X: np.ndarray
     y: np.ndarray
-    filenames: List[str]
+    filenames: list[str]
+
+
+def _atom_number(symbol: str, path: Path) -> float:
+    normalized = symbol.capitalize()
+    if normalized not in ATOM_NUMBERS:
+        raise ValueError(f"Unsupported element {symbol!r} in XYZ file: {path}")
+    return ATOM_NUMBERS[normalized]
+
+
+def _read_xyz(path: Path) -> tuple[list[str], np.ndarray]:
+    """Read a standard XYZ file and return element symbols and coordinates."""
+    path = Path(path)
+    lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    if not lines:
+        raise ValueError(f"Empty XYZ file: {path}")
+    try:
+        atom_count = int(lines[0].strip())
+    except ValueError as error:
+        raise ValueError(f"First line of an XYZ file must be an atom count: {path}") from error
+
+    coordinate_lines = lines[2 : 2 + atom_count]
+    if len(coordinate_lines) != atom_count:
+        raise ValueError(f"XYZ file declares {atom_count} atoms but contains {len(coordinate_lines)} coordinate rows: {path}")
+
+    elements: list[str] = []
+    coordinates: list[list[float]] = []
+    for line_number, line in enumerate(coordinate_lines, start=3):
+        fields = line.split()
+        if len(fields) < 4:
+            raise ValueError(f"Expected element and three coordinates on line {line_number}: {path}")
+        try:
+            coordinates.append([float(value) for value in fields[1:4]])
+        except ValueError as error:
+            raise ValueError(f"Invalid coordinate on line {line_number}: {path}") from error
+        elements.append(fields[0])
+    return elements, np.asarray(coordinates, dtype=float)
+
 
 def _read_xyz_tokens_as_numeric(path: Path) -> np.ndarray:
-    """
-    Match PCA-CC notebook `get_xyz()` behavior:
-    - read first line as atom count
-    - keep ONLY the last `num_atoms` lines from the remainder (this drops the comment line)
-    - split each line into tokens (Element x y z)
-    - replace element symbols with atomic numbers, keep coordinates as floats
-    Result length = 4 * num_atoms
-    """
-    with Path(path).open("r", encoding="utf-8", errors="ignore") as f:
-        first = f.readline().strip()
-        if not first:
-            raise ValueError(f"Empty xyz file: {path}")
-        n = int(first)
-        rest = f.read().splitlines()
-    # Keep last n lines (drops comment line if present)
-    coord_lines = rest[-n:] if len(rest) >= n else rest
-    vals: List[float] = []
-    for ln in coord_lines:
-        parts = ln.split()
-        if not parts:
-            continue
-        # expect: Element x y z
-        el = parts[0]
-        vals.append(float(ATOM_MAP.get(el, ATOM_MAP.get(el.capitalize(), np.nan))))
-        # coords
-        for tok in parts[1:4]:
-            vals.append(float(tok))
-    if len(vals) != 4 * n:
-        # still return what we have, but be explicit
-        raise ValueError(f"XYZ parsing mismatch for {path}: expected {4*n} values, got {len(vals)}")
-    return np.asarray(vals, dtype=float)
+    """Encode XYZ data as atomic number followed by x, y, z for each atom."""
+    elements, coordinates = _read_xyz(path)
+    values = [value for element, xyz in zip(elements, coordinates) for value in (_atom_number(element, path), *xyz)]
+    return np.asarray(values, dtype=float)
 
-def _bond_length(a: np.ndarray, b: np.ndarray) -> float:
-    return float(np.linalg.norm(b - a))
 
 def _bond_angle(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> float:
-    v1 = a - b
-    v2 = c - b
-    cos_t = float(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
-    cos_t = max(-1.0, min(1.0, cos_t))
-    return float(np.arccos(cos_t))
+    first, second = a - b, c - b
+    denominator = np.linalg.norm(first) * np.linalg.norm(second)
+    if denominator == 0:
+        raise ValueError("Cannot calculate a bond angle with coincident atoms.")
+    cosine = np.clip(np.dot(first, second) / denominator, -1.0, 1.0)
+    return float(np.arccos(cosine))
+
 
 def _dihedral(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray) -> float:
-    b1 = b - a
-    b2 = c - b
-    b3 = d - c
+    first, second, third = b - a, c - b, d - c
+    normal_first, normal_second = np.cross(first, second), np.cross(second, third)
+    norm_first, norm_second, norm_middle = np.linalg.norm(normal_first), np.linalg.norm(normal_second), np.linalg.norm(second)
+    if norm_first == 0 or norm_second == 0 or norm_middle == 0:
+        raise ValueError("Cannot calculate a dihedral angle with collinear or coincident atoms.")
+    normal_first /= norm_first
+    normal_second /= norm_second
+    middle = np.cross(normal_first, second / norm_middle)
+    return float(np.arctan2(np.dot(middle, normal_second), np.dot(normal_first, normal_second)))
 
-    n1 = np.cross(b1, b2)
-    n2 = np.cross(b2, b3)
-
-    n1 /= (np.linalg.norm(n1) + 1e-12)
-    n2 /= (np.linalg.norm(n2) + 1e-12)
-
-    m1 = np.cross(n1, b2 / (np.linalg.norm(b2) + 1e-12))
-    x = float(np.dot(n1, n2))
-    y = float(np.dot(m1, n2))
-    return float(np.arctan2(y, x))
-#_DEBUG_FILE_INDEX = 34   # 35th file
-#_FILE_COUNTER = 0
 
 def _internal_coords_from_xyz(path: Path) -> np.ndarray:
-    global _FILE_COUNTER
+    """Build the notebook-compatible sequential bond, angle, and dihedral vector."""
+    _, positions = _read_xyz(path)
+    bonds = [np.linalg.norm(positions[index] - positions[index - 1]) for index in range(1, len(positions))]
+    angles = [_bond_angle(positions[index - 2], positions[index - 1], positions[index]) for index in range(2, len(positions))]
+    dihedrals = [_dihedral(positions[index - 3], positions[index - 2], positions[index - 1], positions[index]) for index in range(3, len(positions))]
+    return np.asarray([*bonds, *angles, *dihedrals], dtype=float)
 
-    with Path(path).open("r", encoding="utf-8", errors="ignore") as f:
-        n = int(f.readline().strip())
-        _ = f.readline()
-        atoms = []
-
-        for _i in range(n):
-            parts = f.readline().split()
-            if len(parts) < 4:
-                continue
-            el = parts[0]
-            x, y, z = parts[1:4]
-            atoms.append([
-                ATOM_MAP.get(el, ATOM_MAP.get(el.capitalize(), np.nan)),
-                float(x), float(y), float(z)
-            ])
-
-    arr = np.asarray(atoms, dtype=float)
-    pos = arr[:, 1:4]
-
-    bl = []
-    ba = []
-    dh = []
-
-    for i in range(1, len(pos)):
-        bl.append(_bond_length(pos[i-1], pos[i]))
-
-    for i in range(2, len(pos)):
-        ba.append(_bond_angle(pos[i-2], pos[i-1], pos[i]))
-
-    for i in range(3, len(pos)):
-        dh.append(_dihedral(pos[i-3], pos[i-2], pos[i-1], pos[i]))
-
-    # print only for the 35th file
- #   if _FILE_COUNTER == _DEBUG_FILE_INDEX:
- #       print("\n==============================")
- #       print("DEBUG: FIRST FILE INTERNAL COORDS")
- #       print("File:", path.name)
- #       print("Total atoms:", len(pos))
- #       print("Total bond angles:", len(ba))
- #       print("\nALL BOND ANGLES:")
- #       for i, angle in enumerate(ba):
- #           print(f"angle[{i}] = {angle}")
- #       print("==============================\n")
- #   _FILE_COUNTER +=1
-
-    return np.asarray(bl + ba + dh, dtype=float)
 
 def _read_descriptor_floats(path: Path) -> np.ndarray:
-    """
-    Match DD/ADD notebook behavior: read the whole file and split on whitespace.
-    """
-    text = Path(path).read_text(encoding="utf-8", errors="ignore")
-    toks = text.split()
-    vals = [float(t) for t in toks]
-    return np.asarray(vals, dtype=float)
+    """Read a whitespace-separated DD or ADD descriptor file."""
+    try:
+        values = [float(value) for value in Path(path).read_text(encoding="utf-8", errors="ignore").split()]
+    except ValueError as error:
+        raise ValueError(f"Descriptor file contains a non-numeric value: {path}") from error
+    if not values:
+        raise ValueError(f"Descriptor file is empty: {path}")
+    return np.asarray(values, dtype=float)
 
-def read_excitations_csv(
-    path: Path,
-    wavelength_max_nm: float,
-    pad_value: float,
-    filter_wavelengths: bool = True,
-) -> np.ndarray:
-    """
-    Read excitation wavelengths and oscillator strengths.
 
-    When filter_wavelengths=True:
-        Remove excitation rows above wavelength_max_nm and pad the result.
+def _read_feature(path: Path, descriptor: str) -> np.ndarray:
+    if descriptor == "pca_cc":
+        return _read_xyz_tokens_as_numeric(path)
+    if descriptor == "umap_ic":
+        return _internal_coords_from_xyz(path)
+    if descriptor in {"dd", "add"}:
+        return _read_descriptor_floats(path)
+    raise ValueError(f"descriptor must be one of: {', '.join(sorted(VALID_DESCRIPTORS))}")
 
-    When filter_wavelengths=False:
-        Keep every excitation row, including wavelengths above the cutoff.
-    """
-    df = pd.read_csv(path)
-    num_elements = df.shape[0] * df.shape[1]
 
+def read_excitations_csv(path: Path, wavelength_max_nm: float, pad_value: float, filter_wavelengths: bool = True) -> np.ndarray:
+    """Read and flatten wavelength/oscillator labels, padding filtered rows."""
+    frame = pd.read_csv(path)
+    if frame.empty:
+        raise ValueError(f"Excitation CSV is empty: {path}")
+    expected_values = frame.size
     if filter_wavelengths:
-        wavelength_col = (
-            "wavelength"
-            if "wavelength" in df.columns
-            else df.columns[0]
-        )
+        wavelength_column = "wavelength" if "wavelength" in frame.columns else frame.columns[0]
+        frame = frame.loc[frame[wavelength_column] <= wavelength_max_nm]
+    values = frame.to_numpy(dtype=float).ravel()
+    return np.pad(values, (0, expected_values - len(values)), constant_values=pad_value)
 
-        df = df.loc[df[wavelength_col] <= wavelength_max_nm]
 
-    arr = df.to_numpy(dtype=float).flatten()
+def _pad_rows(rows: list[np.ndarray], pad_value: float) -> np.ndarray:
+    width = max(len(row) for row in rows)
+    return np.vstack([np.pad(row, (0, width - len(row)), constant_values=pad_value) for row in rows])
 
-    if len(arr) < num_elements:
-        arr = np.pad(
-            arr,
-            (0, num_elements - len(arr)),
-            mode="constant",
-            constant_values=pad_value,
-        )
 
-    return arr
-def load_dataset(
-    *,
-    descriptor: str,
-    features_dir: Path,
-    excitations_dir: Path,
-    file_glob: str = "*cluster*",
-    wavelength_max_nm: float = 900.0,
-    pad_value: float = -1.0,
-    filter_wavelengths: bool = True,
-) -> Dataset:
-    """
-    descriptor: one of {"pca_cc","umap_ic","dd","add"} controlling how features are built.
-    - pca_cc: xyz -> tokens (Z, x, y, z) per atom
-    - umap_ic: xyz -> internal coordinates
-    - dd/add: read descriptor floats from text files
-    """
-    descriptor = descriptor.lower()
-    features_dir = Path(features_dir)
-    excitations_dir = Path(excitations_dir)
+def load_dataset(*, descriptor: str, features_dir: Path, excitations_dir: Path, file_glob: str = "*cluster*", wavelength_max_nm: float = 900.0, pad_value: float = -1.0, filter_wavelengths: bool = True) -> Dataset:
+    """Load matching feature and excitation-label files for a training workflow."""
+    descriptor = descriptor.lower().replace("-", "_")
+    if descriptor not in VALID_DESCRIPTORS:
+        raise ValueError(f"descriptor must be one of: {', '.join(sorted(VALID_DESCRIPTORS))}")
+    features_dir, excitations_dir = Path(features_dir), Path(excitations_dir)
+    if not features_dir.is_dir():
+        raise FileNotFoundError(f"Feature directory not found: {features_dir}")
+    if not excitations_dir.is_dir():
+        raise FileNotFoundError(f"Excitation-label directory not found: {excitations_dir}")
 
-    feature_paths = sorted(features_dir.glob(file_glob))
+    feature_paths = sorted(path for path in features_dir.glob(file_glob) if path.is_file())
     if not feature_paths:
-        raise FileNotFoundError(
-            f"No feature files matched {file_glob!r} under {features_dir}"
-        )
+        raise FileNotFoundError(f"No feature files matched {file_glob!r} under {features_dir}")
 
-    X_rows: List[np.ndarray] = []
-    y_rows: List[np.ndarray] = []
-    stems: List[str] = []
-    dropped: List[str] = []
-
-    for fp in feature_paths:
-        stem = fp.stem
-        csv_path = excitations_dir / f"{stem}.csv"
-
-        if not csv_path.exists():
-            dropped.append(stem)
+    features, labels, names, skipped = [], [], [], []
+    for feature_path in feature_paths:
+        label_path = excitations_dir / f"{feature_path.stem}.csv"
+        if not label_path.is_file():
+            skipped.append(f"{feature_path.stem} (no matching CSV)")
             continue
-
-        # Only inspect and drop conformations when filtering is enabled.
         if filter_wavelengths:
-            df_check = pd.read_csv(csv_path)
-
-            wavelength_values = (
-                df_check["wavelength"]
-                if "wavelength" in df_check.columns
-                else df_check.iloc[:, 0]
-            )
-
-            if (wavelength_values > wavelength_max_nm).any():
-                dropped.append(stem)
+            label_frame = pd.read_csv(label_path)
+            wavelength_column = "wavelength" if "wavelength" in label_frame.columns else label_frame.columns[0]
+            if (label_frame[wavelength_column] > wavelength_max_nm).any():
+                skipped.append(f"{feature_path.stem} (wavelength exceeds cutoff)")
                 continue
+        label = read_excitations_csv(label_path, wavelength_max_nm, pad_value, filter_wavelengths)
+        features.append(_read_feature(feature_path, descriptor))
+        labels.append(label)
+        names.append(feature_path.stem)
 
-        y = read_excitations_csv(
-            csv_path,
-            wavelength_max_nm=wavelength_max_nm,
-            pad_value=pad_value,
-            filter_wavelengths=filter_wavelengths,
-        )
-
-        if descriptor == "pca_cc":
-            x = _read_xyz_tokens_as_numeric(fp)
-        elif descriptor == "umap_ic":
-            x = _internal_coords_from_xyz(fp)
-        elif descriptor in ("dd", "add"):
-            x = _read_descriptor_floats(fp)
-        else:
-            raise ValueError(
-                "descriptor must be one of: pca_cc, umap_ic, dd, add"
-            )
-
-        X_rows.append(x)
-        y_rows.append(y)
-        stems.append(stem)
-
-    if not X_rows:
-        raise RuntimeError(
-            "No usable samples were loaded "
-            "(all files dropped or missing excitations CSVs)."
-        )
-
-    max_len = max(len(r) for r in X_rows)
-
-    X = np.vstack(
-        [
-            np.pad(
-                r,
-                (0, max_len - len(r)),
-                mode="constant",
-                constant_values=0.0,
-            )
-            for r in X_rows
-        ]
-    )
-    max_y_len = max(len(r) for r in y_rows)
-    y = np.vstack(
-    [
-        np.pad(
-            r,
-            (0, max_y_len - len(r)),
-            mode="constant",
-            constant_values=pad_value,
-        )
-        for r in y_rows
-    ]
-)
-
- #   y = np.vstack(y_rows)
-
-    print(
-        f"Loaded {len(stems)} samples; "
-        f"dropped {len(dropped)} samples; "
-        f"X shape={X.shape}; "
-        f"y shape={y.shape}; "
-        f"filter_wavelengths={filter_wavelengths}"
-    )
-
-    return Dataset(
-        X=X,
-        y=y,
-        filenames=stems,
-    )
+    if not features:
+        detail = "; ".join(skipped[:3]) or "no matching inputs"
+        raise RuntimeError(f"No usable samples were loaded from {features_dir}. Examples: {detail}")
+    dataset = Dataset(X=_pad_rows(features, 0.0), y=_pad_rows(labels, pad_value), filenames=names)
+    print(f"Loaded {len(names)} samples; skipped {len(skipped)}; X shape={dataset.X.shape}; y shape={dataset.y.shape}.")
+    return dataset

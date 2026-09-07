@@ -1,2 +1,0 @@
-seed_value,iteration,train_size,test_size,method,train_rmse,test_rmse
-123,8,190,54,none,37.04882667346271,33.72583552004029

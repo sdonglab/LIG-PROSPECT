@@ -1,8 +1,0 @@
-descriptor: ADD
-test_mutant: K283G
-method: none
-best_k: null
-train_rmse: 49.68375506766814
-test_rmse: 71.51422105119812
-n_train: 233
-n_test: 37

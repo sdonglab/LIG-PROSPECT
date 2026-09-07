@@ -1,0 +1,61 @@
+# Training and evaluation at an 1100 nm wavelength cutoff.
+# Use with ligprospect-train-single-split, ligprospect-evaluate-bootstrap,
+# ligprospect-evaluate-heldout-mutant, or ligprospect-compare-models.
+run:
+  out_root: output_1100nm
+  descriptor: all  # dd, add, pca_cc, umap_ic, or all
+
+data:
+  excitations_dir: input-database/all-conformations/csv
+  file_glob: "*cluster*"
+  wavelength_max_nm: 1100
+  filter_wavelengths: true
+  pad_value: -1
+
+split:
+  test_fraction: 0.2
+  min_train_fraction: 0.3
+  n_training_points: 8
+
+seed: 123
+n_bootstrap_iterations: 100
+
+descriptors:
+  dd:
+    features_dir: input-database/all-conformations/desc-4
+    method: none
+  add:
+    features_dir: input-database/all-conformations/desc-7-radians
+    method: none
+  pca_cc:
+    features_dir: input-database/all-conformations/xyz
+    method: pca
+    max_components: 30
+  umap_ic:
+    features_dir: input-database/all-conformations/xyz
+    method: umap
+    max_components: 30
+    umap: {n_neighbors: 15, min_dist: 0.1, metric: euclidean}
+
+bootstrap:
+  use_splits: true
+  splits_path: output_1100nm/splits_seed123_1100nm.npz
+  reuse_splits_if_exists: true
+
+single:
+  use_splits: true
+  splits_path: output_1100nm/splits_seed123_1100nm.npz
+  reuse_splits_if_exists: true
+  iteration: 8
+
+mutant_prediction:
+  test_mutant: K283G
+  y_mode_for_k: wavelength_only
+  do_peak_analysis: true
+  sigma: 0.2
+  peak_height: 0.0
+  bins: 25
+
+baselines:
+  splits_path: output_1100nm/splits_seed123_1100nm.npz
+  iteration: 8

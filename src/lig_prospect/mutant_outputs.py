@@ -127,12 +127,6 @@ def save_wavelength_histogram(
 
     return counts_path, png_path
 
-
-from pathlib import Path
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-
 def analyze_and_save_peaks(
     outdir: Path,
     prefix: str,
@@ -147,7 +141,7 @@ def analyze_and_save_peaks(
     hist_xlim: tuple[float, float] | None = None,
     hist_ylim: tuple[float, float] | None = None,
     save_first5_overlay: bool = False,
-    debug_index: int | None = None,  # set to None to disable debug prints
+    debug_index: int | None = None,
 ) -> dict:
     """Peak analysis + CSV/PNG outputs (requires LogIR + scipy)."""
     outdir = ensure_outdir(outdir)

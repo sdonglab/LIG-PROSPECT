@@ -2,66 +2,36 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Dict
 import time
-import yaml  # type: ignore
 
+from .config import DESCRIPTOR_TAGS, add_config_argument, data_settings, load_config, optional_path, selected_descriptors
 from .io import load_dataset
 from .bootstrap_core import BootstrapCfg, run_bootstrap_notebook_exact, write_bootstrap_csvs
 from .sizing import resolve_split_sizes
 
-DESCRIPTOR_TAGS = {
-    "pca_cc": "PCA-CC",
-    "umap_ic": "UMAP-IC",
-    "dd": "DD",
-    "add": "ADD",
-}
-
-
-def _load_yaml(path: Path) -> Dict[str, Any]:
-    with Path(path).open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
-
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="spectra-bootstrap", description="Notebook-matching bootstrapping runner.")
-    p.add_argument("--config", required=True, type=str, help="YAML config file")
+    p = argparse.ArgumentParser(
+        prog="ligprospect-evaluate-bootstrap",
+        description="Evaluate a model across repeated train/test splits.",
+    )
+    add_config_argument(p)
     return p
-
-
-def _normalize_optional_path(val: Any) -> Path | None:
-    """Treat None/'none'/'' as None; otherwise Path(val)."""
-    if val is None:
-        return None
-    if isinstance(val, str) and val.strip().lower() in {"", "none", "null"}:
-        return None
-    return Path(str(val))
 
 
 def main() -> None:
     args = build_parser().parse_args()
-    cfg_all = _load_yaml(Path(args.config))
+    cfg_all = load_config(args.config)
 
     run_cfg = cfg_all.get("run", {}) or {}
     out_root = Path(run_cfg.get("out_root", "outputs")) / "bootstrap"
     out_root.mkdir(parents=True, exist_ok=True)
-    descriptor_sel = str(run_cfg.get("descriptor", "all")).lower()
-
-    file_glob = str(cfg_all.get("file_glob", "*cluster*"))
-    wavelength_max_nm = float(cfg_all.get("wavelength_max_nm", 900))
-    filter_wavelengths = bool(cfg_all.get("filter_wavelengths", False))
-    pad_value = float(cfg_all.get("pad_value", -1))
-    excitations_dir = Path(cfg_all["excitations_dir"])
-
-    descriptors_cfg = cfg_all.get("descriptors", {}) or {}
-    if not descriptors_cfg:
-        raise ValueError("No 'descriptors' configured in YAML.")
-    selected_desc = {
-        k: v for k, v in descriptors_cfg.items()
-        if descriptor_sel == "all" or str(k).lower() == descriptor_sel
-    }
-    if not selected_desc:
-        raise ValueError(f"No descriptors matched selection '{descriptor_sel}'.")
+    common_data = data_settings(cfg_all)
+    file_glob = common_data["file_glob"]
+    wavelength_max_nm = common_data["wavelength_max_nm"]
+    filter_wavelengths = common_data["filter_wavelengths"]
+    pad_value = common_data["pad_value"]
+    excitations_dir = common_data["excitations_dir"]
+    selected_desc = selected_descriptors(cfg_all)
 
     # Load ONE descriptor's dataset first, purely to learn n_samples, so
     # test_set_size / training_sizes can scale with whatever conformation
@@ -104,7 +74,7 @@ def main() -> None:
     if not use_splits:
         splits_path = None
     else:
-        splits_path_cfg = _normalize_optional_path(bootstrap_cfg.get("splits_path", None))
+        splits_path_cfg = optional_path(bootstrap_cfg.get("splits_path", None))
         if splits_path_cfg is not None:
             splits_path = splits_path_cfg
         else:
@@ -113,9 +83,6 @@ def main() -> None:
 
     for key, desc_cfg in selected_desc.items():
         key_l = str(key).lower()
-        if key_l not in DESCRIPTOR_TAGS:
-            raise ValueError(f"Unknown descriptor key: {key_l}. Use one of {sorted(DESCRIPTOR_TAGS)}")
-
         tag = DESCRIPTOR_TAGS[key_l]
         method = str(desc_cfg.get("method", "none")).lower()
         max_components = int(desc_cfg.get("max_components", 30))

@@ -1,8 +1,0 @@
-descriptor: PCA-CC
-test_mutant: WT
-method: pca
-best_k: 11
-train_rmse: 49.33248121768686
-test_rmse: 119.44685382952268
-n_train: 137
-n_test: 133

@@ -1,108 +1,119 @@
-# LIG-PROSPECT - LIGand-based PROtein-agnostic SPECTral Prediction
-LIG-PROSPECT is a machine learning framework for predicting flavoprotein excitation spectra from cofactor-substrate structural data. This pipeline supports multiple structural descriptors and provides reproducible workflows for training, evaluation and mutant prediction.
+# LIG-PROSPECT
 
-## Overview
-LIG-PROSPECT establishes a mapping between molecular structure and spectral response using a combination of structural featurization, dimensionality reduction, and supervised learning models. The framework supports multiple descriptor types and provides end-to-end workflows for training, evaluation, and prediction.
+**LIG**and-based **PRO**tein-agnostic **SPEC**tral **T**prediction predicts four excitation wavelength/oscillator-strength pairs from structural features.
 
-## Descriptors
-- DD : 4-distance descriptors
-- ADD: 4-distance + 3 angle descriptors
-- PCA-CC: Principal Component Analysis on Cartesian Coordinates
-- UMAP-IC: UMAP on Internal Coordinates
+| Key | Representation | Inference input |
+| --- | --- | --- |
+| `dd` | Distance descriptor | Text file with 4 ordered distances |
+| `add` | Angle-distance descriptor | Text file with 4 distances and 3 angles (radians) |
+| `pca_cc` | PCA Cartesian coordinates | XYZ file with the training atom order |
+| `umap_ic` | UMAP internal coordinates | XYZ file with the training atom order |
 
-## Features
-- Bootstrap-based model evaluation
-- Single-iteration reproduction 
-- Held-out mutant prediction
-- Deterministic dataset splitting for reproducibility
-- Command line workflows for end-to-end analysis
-- Export of prediction results and figures
+Start with [`notebooks/01_predict_with_saved_model.ipynb`](notebooks/01_predict_with_saved_model.ipynb), which runs on the bundled example data.
 
-## Installation
-Install dependencies:
-```
-pip install -r requirements_notebook.txt
-```
-Install in editable mode:
-```
-pip install -e .
-```
-## Input data
-The pipeline is designed to work with structural datatsets derived from cofactor-substrate conformations after docking in protein environment. Depending on the descriptor, inputs may include:
+## Install
 
-- XYZ coordinate files
-- CSV metadata files containing 4 excitational energies and corresponding oscillator strengths
-- Precomputed descriptor files
+LIG-PROSPECT requires Python 3.9 or newer. From the repository root:
 
-## Project Structure
-
-```
-lig-prospect/ 
-|-- configs/ # YAML configuration files 
-|-- src/lig_prospect/ # Source code 
-|-- input-database/ # Input structural and descriptor data 
-|-- outputs/ # Predictions, metrics, and figures 
-|-- requirements_notebook.txt 
-|-- README.md
-
-input-database/ 
-|--- all-conformations/ 
-│     |-- xyz/ 
-│     |-- csv/ 
-│     |-- desc-4/ 
-│     |-- desc-7-radians/
+```bash
+python -m venv .venv
+source .venv/bin/activate            # Windows: .venv\\Scripts\\activate
+python -m pip install --upgrade pip
+python -m pip install -e .
 ```
 
-## Output
-Depending on the workflow, LIG-PROSPECT generates:
+For the notebook interface, install the optional dependency and open Jupyter from this project directory.
 
-- Predicted vs. actual wavelength CSV files
-- Peak analysis outputs
-- Histograms and scatter plots
-- Bootstrap summary statistics
-- Mutant prediction results
-
-## Usage
-
-### Configuration file
-All workflows are controlled via a YAML configuration file:
-
-```
-seed: 123
-n_bootstrap_iterations: 100
-training_sizes: [60, 70, 80, 90, 100]
-test_set_size: 54
-file_glob: "*cluster*"
-wavelength_max_nm: 900
-pad_value: -1
+```bash
+python -m pip install -e ".[notebook]"
+jupyter lab
 ```
 
-Run commands by passing the config file:
+## Predict spectra for your own structures
+
+Pretrained models are in `saved_models/`. Put **only feature files** for the structures you want to predict in a new directory; excitation CSVs are not needed for inference. The descriptor type and feature ordering must match the selected model. The small `example_data/` directory is included only to verify installation and demonstrate the expected layouts.
+
+The default configuration uses the DD single-run model:
+
+```bash
+ligprospect-predict --config configs/pred_config.yaml
 ```
-spectra-bootstrap --config configs/config.yaml
+
+Edit these fields in [`configs/pred_config.yaml`](configs/pred_config.yaml) for your data:
+
+```yaml
+prediction:
+  workflow: single_run_random_split  # or hold_out_mutant
+  descriptor: dd                     # dd, add, pca_cc, or umap_ic
+data:
+  features_dir: path/to/my_features
+  file_glob: "*.txt"                 # use "*.xyz" for pca_cc/umap_ic
+  dataset_name: my_experiment
 ```
-### Run bootstrap workflow
+
+Or specify all paths explicitly:
+
+```bash
+ligprospect-predict \
+  --model saved_models/single_run_random_split/DD/ligprospect_dd_single_iter008_best_model.joblib \
+  --metadata saved_models/single_run_random_split/DD/ligprospect_dd_single_iter008_best_metadata.yaml \
+  --descriptor dd \
+  --features-dir path/to/my_distance_files \
+  --file-glob "*.txt" \
+  --output results/my_predictions.csv
 ```
-spectra-bootstrap --config configs/config.yaml
+
+The output has one row per structure and eight values: `pred_1, osc_1, ..., pred_4, osc_4`.
+
+Read [`docs/input-data.md`](docs/input-data.md) before preparing a new dataset. A different atom order, descriptor definition, or distance/angle unit is not compatible with a saved model.
+
+## Train and evaluate a model
+
+Training labels are CSV files containing excitation wavelengths and matching oscillator strengths. Structural feature files and label CSVs must share a filename stem. The private `input-database/` directory is intentionally excluded from this repository; update the paths in `configs/config_900nm.yaml` or `configs/config_1100nm.yaml` to point to your own training data before training:
+
+```bash
+ligprospect-train-single-split --config configs/config_900nm.yaml
+ligprospect-evaluate-bootstrap --config configs/config_900nm.yaml
+ligprospect-evaluate-heldout-mutant --config configs/config_900nm.yaml
+ligprospect-compare-models --config configs/config_900nm.yaml
 ```
-### Run single iteration
+
+Use a new `run.out_root` for each analysis. Begin with `ligprospect-train-single-split` and confirm the reported sample count and feature shape before a larger bootstrap run.
+
+### Which command should I use?
+
+| Command | Purpose | Needs experimental labels? |
+| --- | --- | --- |
+| `ligprospect-predict` | Apply a saved model to new structures. | No |
+| `ligprospect-train-single-split` | Train, evaluate, and save one model using one reproducible split. | Yes |
+| `ligprospect-evaluate-bootstrap` | Repeat train/test splits to estimate performance stability. | Yes |
+| `ligprospect-evaluate-heldout-mutant` | Train on other mutants and evaluate on one held-out mutant. | Yes |
+| `ligprospect-compare-models` | Compare regression-model families on a fixed split. | Yes |
+
+
+Each training configuration is grouped by purpose: `run` selects the output directory and descriptor, `data` holds input locations and wavelength filtering, `split` controls automatic or fixed split sizes, and each workflow has its own short block (`bootstrap`, `single`, `mutant_prediction`, or `baselines`).
+
+## Project layout
+
+```text
+configs/       YAML settings for training and inference
+docs/          Data-format reference
+example_data/  Small public inputs and labels for installation checks and the tutorial
+notebooks/     Step-by-step Jupyter tutorial
+saved_models/  Bundled trained models and metadata
+src/           Package source code
+outputs/       Generated results (not source data)
 ```
-spectra-single --config configs/config.yaml
-```
-### Run mutant prediction
-```
-spectra-mutant --config configs/config.yaml
-```
+
+`outputs/`, `new_data/`, and `input-database/` are intentionally ignored by Git. Saved models and `example_data/` are included so users can run inference immediately.
+
 ## Citation
-If you use this code in your work, please cite:
 
-Bhumika Jayee, Sunny Lee, Sijia S. Dong. Sequence-Transferrable Machine Learning Prediction of Flavin-Dependent Photoenzyme Spectral Properties. ChemRxiv. 2026. https://doi.org/10.26434/chemrxiv.15002532/v2
-
+Bhumika Jayee, Sunny Lee, Sijia S. Dong. *Sequence-Transferrable Machine Learning Prediction of Flavin-Dependent Photoenzyme Spectral Properties.* ChemRxiv (2026). https://doi.org/10.26434/chemrxiv.15002532/v2
 
 ## Contact
-Sijia Dong (s.dong (AT) northeastern.edu)
 
-Bhumika Jayee (bhumikajayee03 (AT) gmail.com)
+Sijia Dong — s.dong (AT) northeastern.edu
+Bhumika Jayee — bhumikajayee03 (AT) gmail.com
 
----
-© 2025 Northeastern University. Any commercial use of this work without explicit written permission from the copyright holder is strictly prohibited. 
+© 2025 Northeastern University. Any commercial use requires written permission from the copyright holder.

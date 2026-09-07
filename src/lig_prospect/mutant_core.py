@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import hashlib
 import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LinearRegression
@@ -15,20 +14,6 @@ try:
     import umap  # type: ignore
 except Exception:  # pragma: no cover
     umap = None
-
-import hashlib, numpy as np
-
-def md5(a: np.ndarray) -> str:
-    a = np.ascontiguousarray(a, dtype=np.float64)
-    return hashlib.md5(a.tobytes()).hexdigest()
-
-def summarize(a: np.ndarray, name="A"):
-    a64 = np.ascontiguousarray(a, dtype=np.float64)
-    print(name, "shape", a64.shape, "dtype", a64.dtype)
-    print(name, "md5", md5(a64))
-    print(name, "nan count", np.isnan(a64).sum())
-    print(name, "min/max", np.nanmin(a64), np.nanmax(a64))
-    print(name, "sum", np.nansum(a64))
 
 def infer_mutant_type_from_name(name: str) -> Optional[str]:
     """Infer mutant label from a filename stem (notebook-style)."""

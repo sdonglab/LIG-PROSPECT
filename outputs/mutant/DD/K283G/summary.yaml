@@ -1,8 +1,0 @@
-descriptor: DD
-test_mutant: K283G
-method: none
-best_k: null
-train_rmse: 50.881809110258764
-test_rmse: 72.24995499723391
-n_train: 233
-n_test: 37

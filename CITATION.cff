@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use LIG-PROSPECT, please cite it as described below."
+title: "LIG-PROSPECT"
+version: "0.1.0"
+authors:
+  - family-names: Jayee
+    given-names: Bhumika
+  - family-names: Lee
+    given-names: Sunny
+  - family-names: Dong
+    given-names: Sijia S.
+doi: 10.26434/chemrxiv.15002532/v2

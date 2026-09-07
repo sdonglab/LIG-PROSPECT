@@ -2,51 +2,34 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Dict
 import time
 
-import yaml  # type: ignore
 import joblib  # type: ignore
+import yaml
 
+from .config import DESCRIPTOR_TAGS, add_config_argument, data_settings, load_config, selected_descriptors
 from .io import load_dataset
 from .mutant_core import MutantCfg, run_mutant_prediction
 from .mutant_outputs import save_predictions_tables, save_wavelength_histogram, analyze_and_save_peaks
 
-DESCRIPTOR_TAGS = {
-    "pca_cc": "PCA-CC",
-    "umap_ic": "UMAP-IC",
-    "dd": "DD",
-    "add": "ADD",
-}
-
-
-def _load_yaml(path: Path) -> Dict[str, Any]:
-    with Path(path).open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
-
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="spectra-mutant", description="Mutant held-out prediction runner.")
-    p.add_argument("--config", required=True, type=str, help="YAML config file")
+    p = argparse.ArgumentParser(
+        prog="ligprospect-evaluate-heldout-mutant",
+        description="Evaluate transfer to one mutant held out from training.",
+    )
+    add_config_argument(p)
     return p
 
 
 def main() -> None:
     args = build_parser().parse_args()
-    cfg_all = _load_yaml(Path(args.config))
+    cfg_all = load_config(args.config)
     run_cfg = cfg_all.get("run", {}) or {}
     out_root = Path(run_cfg.get("out_root", "outputs")) / "mutant"
     out_root.mkdir(parents=True, exist_ok=True)
 
-    descriptor_sel = str(run_cfg.get("descriptor", "all")).lower()
     print(f"📁 Saving mutant outputs to: {out_root.resolve()}")
-    common = dict(
-        file_glob=str(cfg_all.get("file_glob", "*cluster*")),
-        wavelength_max_nm=float(cfg_all.get("wavelength_max_nm", 900)),
-        filter_wavelengths=bool(cfg_all.get("filter_wavelengths", True)),
-        pad_value=float(cfg_all.get("pad_value", -1)),
-        excitations_dir=Path(cfg_all["excitations_dir"]),
-    )
+    common = data_settings(cfg_all)
 
     mp_cfg = cfg_all.get("mutant_prediction", {}) or {}
     test_mutant = str(mp_cfg.get("test_mutant", "K283G"))
@@ -54,26 +37,13 @@ def main() -> None:
     sigma = float(mp_cfg.get("sigma", 0.2))
     peak_height = float(mp_cfg.get("peak_height", 0.0))
     bins = int(mp_cfg.get("bins", 25))
-#    max_wl = float(mp_cfg.get("max_wavelength_nm", common["wavelength_max_nm"]))
     if common["filter_wavelengths"]:
-       max_wl = float(
-          mp_cfg.get(
-              "max_wavelength_nm",
-               common["wavelength_max_nm"],
-          )
-       )
+        max_wl = float(mp_cfg.get("max_wavelength_nm", common["wavelength_max_nm"]))
     else:
-       max_wl = float("inf")
+        max_wl = float("inf")
     do_peaks = bool(mp_cfg.get("do_peak_analysis", True))
 
-    descriptors = cfg_all.get("descriptors", {}) or {}
-    for key, desc_cfg in descriptors.items():
-        key_l = str(key).lower()
-        if key_l not in DESCRIPTOR_TAGS:
-            raise ValueError(f"Unknown descriptor key: {key_l}. Use one of {sorted(DESCRIPTOR_TAGS)}")
-        if descriptor_sel != "all" and key_l != descriptor_sel:
-            continue
-
+    for key_l, desc_cfg in selected_descriptors(cfg_all).items():
         tag = DESCRIPTOR_TAGS[key_l]
 
         ds = load_dataset(
@@ -82,15 +52,11 @@ def main() -> None:
             excitations_dir=common["excitations_dir"],
             file_glob=common["file_glob"],
             wavelength_max_nm=common["wavelength_max_nm"],
-            filter_wavelengths=common["filter_wavelengths"], 
+            filter_wavelengths=common["filter_wavelengths"],
             pad_value=common["pad_value"],
         )
         print("descriptor:", key_l)
         print("X shape:", ds.X.shape, "y shape:", ds.y.shape, "n files:", len(ds.filenames))
-        stems = [Path(f).stem for f in ds.filenames]
-        #print("PKG included n:", len(stems))
-        #print("PKG included first 10:", stems[:10])
-        #print("PKG included last 10:", stems[-10:])
 
         method = str(desc_cfg.get("method", "none")).lower()
         max_components = int(desc_cfg.get("max_components", 30))
@@ -188,5 +154,5 @@ def main() -> None:
                 peak_height=peak_height,
             )
 
-        t1 = time.perf_counter()
-        #print(f"✅ Done {tag} in {(t1 - t0):.2f}s | test_rmse={out.test_rmse:.4f}")
+        runtime = time.perf_counter() - t0
+        print(f"✅ {tag} finished in {runtime:.2f} seconds | test RMSE={out.test_rmse:.4f}")

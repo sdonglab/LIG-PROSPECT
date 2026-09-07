@@ -51,7 +51,7 @@ def _bundle_get(bundle: Any, key: str, default: Any = None) -> Any:
     return getattr(bundle, key, default)
 
 
-def _infer_expected_dim(bundle: Any) -> Optional[int]:
+def infer_expected_dim(bundle: Any) -> Optional[int]:
     """Infer the number of raw input features expected before scaling."""
     scaler = _bundle_get(bundle, "scaler", None)
     if scaler is not None and hasattr(scaler, "n_features_in_"):
@@ -137,7 +137,7 @@ def predict_with_bundle(bundle: Any, X: np.ndarray) -> np.ndarray:
     if model is None:
         raise AttributeError(
             "Saved object does not contain a model. Expected a saved bundle from "
-            "spectra-single or spectra-mutant."
+            "ligprospect-train-single-split or ligprospect-evaluate-heldout-mutant."
         )
 
     X_work = np.asarray(X, dtype=float)
@@ -302,12 +302,11 @@ def _build_output_path_from_config(
     )
 def main() -> None:
     parser = argparse.ArgumentParser(
-        prog="spectra-predict",
-        description="Run a saved LIG-PROSPECT model_bundle.joblib on new/arbitrary data.",
+        prog="ligprospect-predict",
+        description="Use a saved LIG-PROSPECT model to predict spectra for new, unlabeled structures.",
     )
 
-    parser.add_argument("--config", type=Path, default=None, help="Optional prediction YAML config file")
-
+    parser.add_argument("--config", type=Path, help="Optional prediction YAML config file")
     parser.add_argument("--model", type=Path, default=None, help="Path to saved model .joblib")
     parser.add_argument("--metadata", type=Path, default=None, help="Optional model_metadata.yaml")
     parser.add_argument("--descriptor", choices=["add", "dd", "pca_cc", "umap_ic"], default=None)
@@ -322,28 +321,25 @@ def main() -> None:
     data_cfg = cfg.get("data", {}) or {}
     output_cfg = cfg.get("output", {}) or {}
 
-# If --model is supplied manually, use manual mode.
-# Otherwise, build model/metadata paths from the cleaner config layout.
+    # A manual model path takes precedence over the model selected by the config.
     if args.model is not None:
-      model_path = args.model
-      metadata_path = args.metadata
-      descriptor = args.descriptor
-      workflow = "manual"
-      holdout_mutant = None
-
-      if descriptor is None:
-          raise ValueError("--descriptor is required when using --model manually")
-
-      descriptor = _clean_desc_key(descriptor)
-      descriptor_folder = _descriptor_folder_name(descriptor)
+        model_path = args.model
+        metadata_path = args.metadata
+        descriptor = args.descriptor
+        workflow = "manual"
+        holdout_mutant = None
+        if descriptor is None:
+            raise ValueError("--descriptor is required when using --model manually")
+        descriptor = _clean_desc_key(descriptor)
+        descriptor_folder = _descriptor_folder_name(descriptor)
     else:
         (
-          model_path,
-          metadata_path,
-          workflow,
-          holdout_mutant,
-          descriptor_folder,
-          descriptor,
+            model_path,
+            metadata_path,
+            workflow,
+            holdout_mutant,
+            descriptor_folder,
+            descriptor,
         ) = _build_model_paths_from_config(cfg)
 
     features_dir = args.features_dir or (
@@ -355,47 +351,34 @@ def main() -> None:
         output_path = args.output
     else:
         output_path = _build_output_path_from_config(
-          cfg=cfg,
-          workflow=workflow,
-          descriptor=descriptor,
-          descriptor_folder=descriptor_folder,
-          holdout_mutant=holdout_mutant,
+            cfg=cfg,
+            workflow=workflow,
+            descriptor=descriptor,
+            descriptor_folder=descriptor_folder,
+            holdout_mutant=holdout_mutant,
         )
 
     pad_value = args.pad_value if args.pad_value is not None else float(output_cfg.get("pad_value", 0.0))
 
-    missing = []
+    missing: list[str] = []
     if not model_path.exists():
-         missing.append(f"model file not found: {model_path}")
+        missing.append(f"model file not found: {model_path}")
     if metadata_path is not None and not metadata_path.exists():
-         missing.append(f"metadata file not found: {metadata_path}")
-    if features_dir is None:
-         missing.append("data.features_dir or --features-dir")
-    elif not features_dir.exists():
-         missing.append(f"features_dir not found: {features_dir}")
-
-    if missing:
-         raise ValueError("Missing required prediction inputs:\n  - " + "\n  - ".join(missing))
-    # Required-field checks after merging config + flags
-    missing = []
-    if not model_path or str(model_path) == ".":
-        missing.append("model.path or --model")
-    if descriptor is None:
-        missing.append("data.descriptor or --descriptor")
+        missing.append(f"metadata file not found: {metadata_path}")
     if features_dir is None:
         missing.append("data.features_dir or --features-dir")
+    elif not features_dir.exists():
+        missing.append(f"features_dir not found: {features_dir}")
 
     if missing:
-        raise ValueError(
-            "Missing required prediction inputs: " + ", ".join(missing)
-        )
+        raise ValueError("Missing required prediction inputs:\n  - " + "\n  - ".join(missing))
 
     metadata = _load_yaml(metadata_path)
 
     print(f"Loading model: {model_path}")
     bundle = joblib.load(model_path)
 
-    expected_dim = _infer_expected_dim(bundle)
+    expected_dim = infer_expected_dim(bundle)
     if expected_dim is None:
         print("WARNING: expected raw input dimension could not be inferred from model bundle.")
     else:

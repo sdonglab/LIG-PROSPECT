@@ -1,2 +1,0 @@
-1.1430 seconds
-0.0190 minutes

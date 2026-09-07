@@ -7,14 +7,17 @@ requirements.lock.txt
 # Python cache
 __pycache__/
 *.pyc
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
 
-#configs
-configs/test.yaml
-configs/config_pred.yaml
-
-# outputs / generated artifacts
-#outputs/
+# Local runs and generated artifacts
+outputs/
+output_*/
+compare_models/
+new_data/
 1/
+run.log
 outputs/test_one_prediction.csv
 outputs_old/
 outputs_single/
@@ -30,8 +33,7 @@ saved_models/ligprospect_dd_single_iter008_best_metadata.yaml
 *.npz
 archive/
 
-#input
+# Private input data (the small public example_data/ directory is tracked).
 input-database/
 # macOS
 .DS_Store
-

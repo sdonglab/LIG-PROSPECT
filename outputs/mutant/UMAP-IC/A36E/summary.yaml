@@ -1,8 +1,0 @@
-descriptor: UMAP-IC
-test_mutant: A36E
-method: umap
-best_k: 7
-train_rmse: 46.036250313648495
-test_rmse: 65.26050201532362
-n_train: 170
-n_test: 100

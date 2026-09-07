@@ -2,61 +2,59 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Dict
 
 import matplotlib.pyplot as plt
 import pandas as pd
-import yaml  # type: ignore
 
+from .config import DESCRIPTOR_TAGS, add_config_argument, data_settings, load_config, selected_descriptors
 from .io import load_dataset
 from .compare_baselines_core import BaselineCfg, run_baseline_comparison
 from .models import BASELINE_MODELS, DISPLAY_NAMES
-
-DESCRIPTOR_TAGS = {
-    "pca_cc": "PCA-CC",
-    "umap_ic": "UMAP-IC",
-    "dd": "DD",
-    "add": "ADD",
-}
-
-
-def _load_yaml(path: Path) -> Dict[str, Any]:
-    with Path(path).open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
+from .sizing import resolve_split_sizes
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="spectra-baselines",
+        prog="ligprospect-compare-models",
         description="Compare linear regression vs. nonlinear baselines (kernel ridge, "
                      "random forest, Gaussian process, gradient boosting) on a fixed, "
                      "existing train/test split.",
     )
-    p.add_argument("--config", required=True, type=str, help="YAML config file")
+    add_config_argument(p)
     return p
 
 
 def main() -> None:
     args = build_parser().parse_args()
-    cfg_all = _load_yaml(Path(args.config))
+    cfg_all = load_config(args.config)
 
     run_cfg = cfg_all.get("run", {}) or {}
     out_root = Path(run_cfg.get("out_root", "outputs")) / "baselines"
     out_root.mkdir(parents=True, exist_ok=True)
-    descriptor_sel = str(run_cfg.get("descriptor", "all")).lower()
-
-    common = dict(
-        file_glob=str(cfg_all.get("file_glob", "*cluster*")),
-        wavelength_max_nm=float(cfg_all.get("wavelength_max_nm", 900)),
-        filter_wavelengths=bool(cfg_all.get("filter_wavelengths", True)),
-        pad_value=float(cfg_all.get("pad_value", -1)),
-        excitations_dir=Path(cfg_all["excitations_dir"]),
-    )
+    common = data_settings(cfg_all)
 
     seed_value = int(cfg_all.get("seed", 123))
     n_boot = int(cfg_all.get("n_bootstrap_iterations", 100))
-    test_set_size = int(cfg_all.get("test_set_size", 54))
-    training_sizes = [int(x) for x in cfg_all.get("training_sizes", list(range(60, 200, 10)))]
+    selected_desc = selected_descriptors(cfg_all)
+
+    # Resolve the split grid from the actual dataset, just as the bootstrap and
+    # single-split workflows do. This keeps one compact config portable across
+    # datasets of different sizes.
+    first_key, first_desc_cfg = next(iter(selected_desc.items()))
+    first_ds = load_dataset(
+        descriptor=first_key,
+        features_dir=Path(first_desc_cfg["features_dir"]),
+        excitations_dir=common["excitations_dir"],
+        file_glob=common["file_glob"],
+        wavelength_max_nm=common["wavelength_max_nm"],
+        filter_wavelengths=common["filter_wavelengths"],
+        pad_value=common["pad_value"],
+    )
+    n_samples = first_ds.X.shape[0]
+    test_set_size, training_sizes = resolve_split_sizes(n_samples, cfg_all)
+    print(
+        f"📏 n_samples={n_samples} -> test_set_size={test_set_size}, "
+        f"training_sizes={training_sizes}"
+    )
 
     # Reuse single: block values as defaults so this points at the same split
     # (splits_path, iteration, train_size) you already validated for the manuscript,
@@ -65,7 +63,15 @@ def main() -> None:
     baselines_cfg = cfg_all.get("baselines", {}) or {}
 
     iteration = int(baselines_cfg.get("iteration", single_cfg.get("iteration", 8)))
-    train_size = int(baselines_cfg.get("train_size", single_cfg.get("train_size", 190)))
+    train_size = int(
+        baselines_cfg.get("train_size", single_cfg.get("train_size", training_sizes[-1]))
+    )
+    if train_size not in training_sizes:
+        raise ValueError(
+            f"baselines.train_size={train_size} is not one of the resolved "
+            f"training_sizes={training_sizes}. Pick one of those, or omit "
+            "baselines.train_size to use the largest size."
+        )
     splits_path_raw = baselines_cfg.get("splits_path", single_cfg.get("splits_path"))
     if not splits_path_raw:
         raise ValueError(
@@ -77,30 +83,29 @@ def main() -> None:
     models_to_run = [str(m).lower() for m in baselines_cfg.get("models", BASELINE_MODELS)]
     model_params = baselines_cfg.get("model_params", {}) or {}
 
-    descriptors = cfg_all.get("descriptors", {}) or {}
-    if not descriptors:
-        raise ValueError("No 'descriptors' configured in YAML.")
-
     all_results = []
 
-    for key, desc_cfg in descriptors.items():
-        key_l = str(key).lower()
-        if key_l not in DESCRIPTOR_TAGS:
-            raise ValueError(f"Unknown descriptor key: {key_l}. Use one of {sorted(DESCRIPTOR_TAGS)}")
-        if descriptor_sel != "all" and key_l != descriptor_sel:
-            continue
-
+    for key_l, desc_cfg in selected_desc.items():
         tag = DESCRIPTOR_TAGS[key_l]
 
-        ds = load_dataset(
-            descriptor=key_l,
-            features_dir=Path(desc_cfg["features_dir"]),
-            excitations_dir=common["excitations_dir"],
-            file_glob=common["file_glob"],
-            wavelength_max_nm=common["wavelength_max_nm"],
-            filter_wavelengths=common["filter_wavelengths"],
-            pad_value=common["pad_value"],
-        )
+        if key_l == first_key:
+            ds = first_ds
+        else:
+            ds = load_dataset(
+                descriptor=key_l,
+                features_dir=Path(desc_cfg["features_dir"]),
+                excitations_dir=common["excitations_dir"],
+                file_glob=common["file_glob"],
+                wavelength_max_nm=common["wavelength_max_nm"],
+                filter_wavelengths=common["filter_wavelengths"],
+                pad_value=common["pad_value"],
+            )
+            if ds.X.shape[0] != n_samples:
+                raise ValueError(
+                    f"Descriptor '{key_l}' loaded {ds.X.shape[0]} samples but "
+                    f"'{first_key}' loaded {n_samples}. All descriptors must share "
+                    "the same conformation set for a fair comparison."
+                )
 
         method = str(desc_cfg.get("method", "none")).lower()
         max_components = int(desc_cfg.get("max_components", 30))

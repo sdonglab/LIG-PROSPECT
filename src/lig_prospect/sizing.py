@@ -19,13 +19,21 @@ def resolve_split_sizes(n_samples: int, cfg_all: Dict[str, Any]) -> Tuple[int, L
       n_training_points   (default 8)    -> number of points in the training-size sweep,
                                              evenly spaced from min_train up to max_train
     """
-    explicit_test = cfg_all.get("test_set_size", None)
-    explicit_sizes = cfg_all.get("training_sizes", None)
+    split_cfg = cfg_all.get("split", {}) or {}
+    if not isinstance(split_cfg, dict):
+        raise ValueError("split must be a YAML mapping.")
+
+    def get(name: str, default: Any = None) -> Any:
+        """Prefer the compact split: block while accepting legacy top-level keys."""
+        return split_cfg.get(name, cfg_all.get(name, default))
+
+    explicit_test = get("test_set_size")
+    explicit_sizes = get("training_sizes")
 
     if explicit_test is not None and explicit_sizes is not None:
         return int(explicit_test), [int(x) for x in explicit_sizes]
 
-    test_fraction = float(cfg_all.get("test_fraction", 0.2))
+    test_fraction = float(get("test_fraction", 0.2))
     test_set_size = int(explicit_test) if explicit_test is not None else max(
         1, round(test_fraction * n_samples)
     )
@@ -41,8 +49,8 @@ def resolve_split_sizes(n_samples: int, cfg_all: Dict[str, Any]) -> Tuple[int, L
     if explicit_sizes is not None:
         training_sizes = [int(x) for x in explicit_sizes]
     else:
-        min_train_fraction = float(cfg_all.get("min_train_fraction", 0.3))
-        n_points = int(cfg_all.get("n_training_points", 8))
+        min_train_fraction = float(get("min_train_fraction", 0.3))
+        n_points = int(get("n_training_points", 8))
         min_train = max(5, round(min_train_fraction * max_train))
         min_train = min(min_train, max_train)
 

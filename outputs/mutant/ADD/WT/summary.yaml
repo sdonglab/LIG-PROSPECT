@@ -1,8 +1,0 @@
-descriptor: ADD
-test_mutant: WT
-method: none
-best_k: null
-train_rmse: 55.536127542629124
-test_rmse: 53.51765292394953
-n_train: 137
-n_test: 133
