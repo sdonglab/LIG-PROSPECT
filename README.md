@@ -105,7 +105,7 @@ src/           Package source code
 outputs/       Generated results (not source data)
 ```
 
-`outputs/`, `new_data/`, and `input-database/` are intentionally ignored by Git. Saved models and `example_data/` are included so users can run inference immediately.
+Saved models and `example_data/` are included so users can run inference immediately.
 
 ## Citation
 
