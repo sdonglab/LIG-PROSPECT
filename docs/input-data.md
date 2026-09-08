@@ -34,6 +34,12 @@ Each label CSV must contain the four requested excitation wavelengths and their 
 
 Before a large training run, create a dedicated output directory and run `ligprospect-train-single-split`. Confirm its sample count and feature shape first.
 
+The default `configs/train_config.yaml` uses `data.wavelength_max_nm: 900`.
+When `filter_wavelengths: true`, a sample is excluded if any of its excitation
+wavelengths exceed that cutoff. Change the single setting (for example, to
+`1100`) for a different wavelength range; no separate training configuration is
+needed.
+
 ## Generalization note
 
 LIG-PROSPECT can pad shorter vectors when a saved model expects a larger vector. That supports the original variable-length representation; it does not make an incompatible descriptor scientifically valid. Treat a changed atom count, feature-length error, or descriptor definition as a data-preparation issue.

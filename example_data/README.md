@@ -17,7 +17,7 @@ performance or retrain a production model.
 Run the bundled inference check with:
 
 ```bash
-ligprospect-predict --config configs/pred_config.yaml
+ligprospect-predict --config configs/predict_config.yaml
 ```
 
 The command reads `desc-4/` and does not require the CSV labels. The labels are

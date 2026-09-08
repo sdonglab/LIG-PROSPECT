@@ -29,6 +29,19 @@ python -m pip install -e ".[notebook]"
 jupyter lab
 ```
 
+## Configuration
+
+There are only two configuration files:
+
+| File | Use it for |
+| --- | --- |
+| [`configs/train_config.yaml`](configs/train_config.yaml) | Training and all label-based evaluation workflows. |
+| [`configs/predict_config.yaml`](configs/predict_config.yaml) | Applying a bundled or newly trained model to structures without labels. |
+
+The training configuration uses a 900 nm cutoff by default. Change only
+`data.wavelength_max_nm` (for example, to 1100) when your scientific analysis
+uses another cutoff.
+
 ## Predict spectra for your own structures
 
 Pretrained models are in `saved_models/`. Put **only feature files** for the structures you want to predict in a new directory; excitation CSVs are not needed for inference. The descriptor type and feature ordering must match the selected model. The small `example_data/` directory is included only to verify installation and demonstrate the expected layouts.
@@ -36,10 +49,10 @@ Pretrained models are in `saved_models/`. Put **only feature files** for the str
 The default configuration uses the DD single-run model:
 
 ```bash
-ligprospect-predict --config configs/pred_config.yaml
+ligprospect-predict --config configs/predict_config.yaml
 ```
 
-Edit these fields in [`configs/pred_config.yaml`](configs/pred_config.yaml) for your data:
+Edit these fields in [`configs/predict_config.yaml`](configs/predict_config.yaml) for your data:
 
 ```yaml
 prediction:
@@ -51,17 +64,8 @@ data:
   dataset_name: my_experiment
 ```
 
-Or specify all paths explicitly:
-
-```bash
-ligprospect-predict \
-  --model saved_models/single_run_random_split/DD/ligprospect_dd_single_iter008_best_model.joblib \
-  --metadata saved_models/single_run_random_split/DD/ligprospect_dd_single_iter008_best_metadata.yaml \
-  --descriptor dd \
-  --features-dir path/to/my_distance_files \
-  --file-glob "*.txt" \
-  --output results/my_predictions.csv
-```
+For advanced scripting, run `ligprospect-predict --help` to see the optional
+command-line arguments.
 
 The output has one row per structure and eight values: `pred_1, osc_1, ..., pred_4, osc_4`.
 
@@ -69,13 +73,13 @@ Read [`docs/input-data.md`](docs/input-data.md) before preparing a new dataset. 
 
 ## Train and evaluate a model
 
-Training labels are CSV files containing excitation wavelengths and matching oscillator strengths. Structural feature files and label CSVs must share a filename stem. The private `input-database/` directory is intentionally excluded from this repository; update the paths in `configs/config_900nm.yaml` or `configs/config_1100nm.yaml` to point to your own training data before training:
+Training labels are CSV files containing excitation wavelengths and matching oscillator strengths. Structural feature files and label CSVs must share a filename stem. The private `input-database/` directory is intentionally excluded from this repository; update the paths in [`configs/train_config.yaml`](configs/train_config.yaml) to point to your own training data before training:
 
 ```bash
-ligprospect-train-single-split --config configs/config_900nm.yaml
-ligprospect-evaluate-bootstrap --config configs/config_900nm.yaml
-ligprospect-evaluate-heldout-mutant --config configs/config_900nm.yaml
-ligprospect-compare-models --config configs/config_900nm.yaml
+ligprospect-train-single-split --config configs/train_config.yaml
+ligprospect-evaluate-bootstrap --config configs/train_config.yaml
+ligprospect-evaluate-heldout-mutant --config configs/train_config.yaml
+ligprospect-compare-models --config configs/train_config.yaml
 ```
 
 Use a new `run.out_root` for each analysis. Begin with `ligprospect-train-single-split` and confirm the reported sample count and feature shape before a larger bootstrap run.
@@ -91,12 +95,12 @@ Use a new `run.out_root` for each analysis. Begin with `ligprospect-train-single
 | `ligprospect-compare-models` | Compare regression-model families on a fixed split. | Yes |
 
 
-Each training configuration is grouped by purpose: `run` selects the output directory and descriptor, `data` holds input locations and wavelength filtering, `split` controls automatic or fixed split sizes, and each workflow has its own short block (`bootstrap`, `single`, `mutant_prediction`, or `baselines`).
+The training configuration is grouped by purpose: `run` selects the output directory and descriptor, `data` holds input locations and wavelength filtering, `split` controls automatic or fixed split sizes, and each workflow has its own short block (`bootstrap`, `single`, `mutant_prediction`, or `baselines`). With `filter_wavelengths: true`, samples with any excitation above `data.wavelength_max_nm` are excluded from training.
 
 ## Project layout
 
 ```text
-configs/       YAML settings for training and inference
+configs/       train_config.yaml and predict_config.yaml
 docs/          Data-format reference
 example_data/  Small public inputs and labels for installation checks and the tutorial
 notebooks/     Step-by-step Jupyter tutorial

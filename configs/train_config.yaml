@@ -1,14 +1,15 @@
-# Training and evaluation at a 900 nm wavelength cutoff.
-# Use with ligprospect-train-single-split, ligprospect-evaluate-bootstrap,
-# ligprospect-evaluate-heldout-mutant, or ligprospect-compare-models.
+# Training and evaluation settings for LIG-PROSPECT.
+# Use this file with ligprospect-train-single-split,
+# ligprospect-evaluate-bootstrap, ligprospect-evaluate-heldout-mutant, and
+# ligprospect-compare-models. Replace every input-database path with your data.
 run:
-  out_root: output_900nm
+  out_root: outputs
   descriptor: all  # dd, add, pca_cc, umap_ic, or all
 
 data:
   excitations_dir: input-database/all-conformations/csv
-  file_glob: "*cluster*"
-  wavelength_max_nm: 900
+  file_glob: "*"  # Match feature and label stems; narrow this only if needed.
+  wavelength_max_nm: 900  # Change to 1100 (or another cutoff) for your analysis.
   filter_wavelengths: true
   pad_value: -1
 
@@ -37,14 +38,15 @@ descriptors:
     max_components: 30
     umap: {n_neighbors: 15, min_dist: 0.1, metric: euclidean}
 
+# All workflows reuse this deterministic split file when applicable.
 bootstrap:
   use_splits: true
-  splits_path: output_900nm/splits_seed123_900nm.npz
+  splits_path: outputs/shared_splits_seed123.npz
   reuse_splits_if_exists: true
 
 single:
   use_splits: true
-  splits_path: output_900nm/splits_seed123_900nm.npz
+  splits_path: outputs/shared_splits_seed123.npz
   reuse_splits_if_exists: true
   iteration: 8
 
@@ -57,5 +59,5 @@ mutant_prediction:
   bins: 25
 
 baselines:
-  splits_path: output_900nm/splits_seed123_900nm.npz
+  splits_path: outputs/shared_splits_seed123.npz
   iteration: 8

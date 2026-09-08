@@ -1,5 +1,5 @@
 # Saved-model inference. Use with ligprospect-predict.
-# Change only descriptor and data.* for a new dataset.
+# Change only prediction.* and data.* when predicting a new dataset.
 prediction:
   workflow: single_run_random_split  # or hold_out_mutant
   descriptor: dd                     # dd, add, pca_cc, or umap_ic
