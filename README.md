@@ -118,6 +118,7 @@ Bhumika Jayee, Sunny Lee, Sijia S. Dong. *Sequence-Transferrable Machine Learnin
 ## Contact
 
 Sijia Dong — s.dong (AT) northeastern.edu
+
 Bhumika Jayee — bhumikajayee03 (AT) gmail.com
 
-© 2025 Northeastern University. Any commercial use requires written permission from the copyright holder.
+© 2025 Northeastern University. Any commercial use requires written permission from the copyright holder. All rights reserved.
