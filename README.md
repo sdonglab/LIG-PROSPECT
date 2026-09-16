@@ -1,6 +1,6 @@
 # LIG-PROSPECT
 
-**LIG**and-based **PRO**tein-agnostic **SPEC**tral **T**prediction predicts four excitation wavelength/oscillator-strength pairs from structural features.
+**LIG**and-based **PRO**tein-agnostic **SPECT**ral prediction (LIG-PROSPECT) predicts four excitation wavelength/oscillator-strength pairs from structural features.
 
 | Key | Representation | Inference input |
 | --- | --- | --- |
